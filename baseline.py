@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 import csv
 import random
+import numpy
 
 filename = "data/data.csv"
-result_filename = "data/baseline.csv"
 
 def run_baseline():
 	num_correct_age = 0
@@ -43,7 +43,7 @@ def run_baseline():
 				if correct_age < 31 and any(string in row['cleaned_hm'] for string in young_strings):
 					age_classified = True
 					num_correct_age += 1
-				elif correct_age > 30 and correct_age < 61 and parent == True:
+				elif correct_age > 30 and correct_age < 61 and (parent or married):
 					age_classified = True
 					num_correct_age += 1
 				elif not age_classified:
