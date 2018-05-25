@@ -3,22 +3,29 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import LogisticRegression
 import csv
 import numpy as np
-import re
+
 filename = "data/data.csv"
 
-def run_naive_bayes(data, labels, test_data, test_labels):
+def run_naive_bayes(data, labels, test_data, test_labels, type):
 	# get data from get_features
 	clf = MultinomialNB().fit(data, labels)
 	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
-	print("Naive Bayes training accuracy: ")
+	print("Naive Bayes training accuracy ({}): ".format(type))
 	print(np.mean(predicted == labels))
 
-def run_svm(data, labels, test_data, test_labels):
+def run_svm(data, labels, test_data, test_labels, type):
 	clf = SGDClassifier(max_iter = 10).fit(data, labels)
 	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
-	print("SVM training accuracy: ")
+	print("SVM training accuracy ({}): ".format(type))
+	print(np.mean(predicted == labels))
+
+def run_lr(data, labels, test_data, test_labels, type):
+	clf = LogisticRegression().fit(data, labels)
+	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
+	print("Logistic Regression training accuracy ({}): ".format(type))
 	print(np.mean(predicted == labels))
 
 def get_features_bag_of_words():
@@ -84,14 +91,18 @@ def get_features_bag_of_words():
 
 def main():
 	x_train, y_dict_train, x_test, y_dict_test = get_features_bag_of_words()
-	run_naive_bayes(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'])
-	run_naive_bayes(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'])
-	run_naive_bayes(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'])
-	run_naive_bayes(x_train, y_dict_train['age'], x_test, y_dict_test['age'])
-	run_svm(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'])
-	run_svm(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'])
-	run_svm(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'])
-	run_svm(x_train, y_dict_train['age'], x_test, y_dict_test['age'])
+	run_naive_bayes(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'], 'marital')
+	run_naive_bayes(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'], 'gender')
+	run_naive_bayes(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'], 'parenthood')
+	run_naive_bayes(x_train, y_dict_train['age'], x_test, y_dict_test['age'], 'age')
+	run_svm(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'], 'marital')
+	run_svm(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'], 'gender')
+	run_svm(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'], 'parenthood')
+	run_svm(x_train, y_dict_train['age'], x_test, y_dict_test['age'], 'age')
+	run_lr(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'], 'marital')
+	run_lr(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'], 'gender')
+	run_lr(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'], 'parenthood')
+	run_lr(x_train, y_dict_train['age'], x_test, y_dict_test['age'], 'age')
 
 if __name__ == '__main__':
 	main()
