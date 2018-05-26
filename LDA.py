@@ -49,7 +49,7 @@ def LDA_topic_model(data):
 	print '\n'.join('{}'.format(item) for item in topics)
 
 def main():
-	all_data = load_data('data.csv')
+	all_data = load_data('data/data.csv')
 	female_data = []
 	male_data = []
 	single_data = []
@@ -86,7 +86,7 @@ def main():
 			married_data.append(entry)
 		if parental_status == 'y':
 			parent_data.append(entry)
-		elif parental_status == 'n'
+		elif parental_status == 'n':
 			not_parent_data.append(entry)
 
 	print "all data:"
