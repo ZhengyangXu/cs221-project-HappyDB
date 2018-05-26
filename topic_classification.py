@@ -94,7 +94,7 @@ def label_category(data):
 		print category, ":", category_clusters[category]
 
 def main():
-	all_data = load_data('small1.csv')
+	all_data = load_data('data/data.csv')
 	label_category(all_data)
 
 if __name__ == '__main__':
