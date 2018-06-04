@@ -10,8 +10,6 @@ import numpy as np
 filename = "data/data.csv"
 
 def get_accuracy_breakdown(predicted, labels, category):
-	predicted = np.array(predicted)
-	labels = np.array(labels)
 	if category == 'marital':	
 		print("Percent correct for married: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
 		print("Percent correct for unmarried: {}".format(np.mean(predicted[labels == 0] == labels[labels == 0])))
@@ -20,39 +18,64 @@ def get_accuracy_breakdown(predicted, labels, category):
 		print("Percent correct for female: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
 	elif category == 'age':
 		print("Percent correct for < 31: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
-		print("Percent correct for > 30, < 61: {}".format(np.mean(predicted[labels == 2] == labels[labels == 2])))
-		print("Percent correct for > 60: {}".format(np.mean(predicted[labels == 3] == labels[labels == 3])))
+		print("Percent correct for > 30: {}".format(np.mean(predicted[labels == 0] == labels[labels == 0])))
 	elif category == 'parenthood':
 		print("Percent correct for parents: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
 		print("Percent correct for non-parents: {}".format(np.mean(predicted[labels == 0] == labels[labels == 0])))
 
 def run_naive_bayes(data, labels, test_data, test_labels, category):
-	# get data from get_features
-	clf = MultinomialNB().fit(data, labels)
-	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
+	labels_cleaned = np.array(labels)
+	test_labels_cleaned = np.array(test_labels)
+	# filter out bad input
+	data_cleaned = data[labels_cleaned != -1]
+	labels_cleaned = labels_cleaned[labels_cleaned != -1]
+	test_data_cleaned = test_data[test_labels_cleaned != -1]
+	test_labels_cleaned = test_labels_cleaned[test_labels_cleaned != -1]
+	clf = MultinomialNB().fit(data_cleaned, labels_cleaned)
+	predicted = clf.predict(data_cleaned) # change to test_data intead of data when ready for testing
 	print("Naive Bayes training accuracy ({}): ".format(category))
-	print(np.mean(predicted == labels))
-	get_accuracy_breakdown(predicted, labels, category)
+	print(np.mean(predicted == labels_cleaned))
+	print("Naive Bayes test set accuracy ({}): ".format(category))
+	print(np.mean(clf.predict(test_data_cleaned) == test_labels_cleaned))
+	# get_accuracy_breakdown(np.array(predicted), labels_cleaned, category)
 
 def run_svm(data, labels, test_data, test_labels, category):
-	clf = SGDClassifier(max_iter = 10).fit(data, labels)
-	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
+	labels_cleaned = np.array(labels)
+	test_labels_cleaned = np.array(test_labels)
+	# filter out bad input
+	data_cleaned = data[labels_cleaned != -1]
+	labels_cleaned = labels_cleaned[labels_cleaned != -1]
+	test_data_cleaned = test_data[test_labels_cleaned != -1]
+	test_labels_cleaned = test_labels_cleaned[test_labels_cleaned != -1]
+	clf = SGDClassifier(max_iter = 10).fit(data_cleaned, labels_cleaned)
+	predicted = clf.predict(data_cleaned) # change to test_data intead of data when ready for testing
 	print("SVM training accuracy ({}): ".format(category))
-	print(np.mean(predicted == labels))
-	get_accuracy_breakdown(predicted, labels, category)
+	print(np.mean(predicted == labels_cleaned))
+	print("SVM test set accuracy ({}): ".format(category))
+	print(np.mean(clf.predict(test_data_cleaned) == test_labels_cleaned))
+	# get_accuracy_breakdown(np.array(predicted), labels_cleaned, category)
 
 def run_lr(data, labels, test_data, test_labels, category):
-	clf = LogisticRegression().fit(data, labels)
-	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
+	labels_cleaned = np.array(labels)
+	test_labels_cleaned = np.array(test_labels)
+	# filter out bad input
+	data_cleaned = data[labels_cleaned != -1]
+	labels_cleaned = labels_cleaned[labels_cleaned != -1]
+	test_data_cleaned = test_data[test_labels_cleaned != -1]
+	test_labels_cleaned = test_labels_cleaned[test_labels_cleaned != -1]
+	clf = LogisticRegression().fit(data_cleaned, labels_cleaned)
+	predicted = clf.predict(data_cleaned) # change to test_data intead of data when ready for testing
 	print("Logistic Regression training accuracy ({}): ".format(category))
-	print(np.mean(predicted == labels))
-	get_accuracy_breakdown(predicted, labels, category)
+	print(np.mean(predicted == labels_cleaned))
+	print("Logistic Regression test set accuracy ({}): ".format(category))
+	print(np.mean(clf.predict(test_data_cleaned) == test_labels_cleaned))
+	# get_accuracy_breakdown(predicted, labels_cleaned, category)
 
 def get_features_bag_of_words():
 	with open(filename, 'rU') as csvfile:
 		reader = csv.DictReader(csvfile)
 		text_data = []
-		age_bucket_labels = [] # 1 for <=30, 2 for 31-60, 3 for >60
+		age_bucket_labels = [] # 1 for <=30, 0 otherwise
 		gender_labels = [] # 1 for female, 0 male, None otherwise
 		marital_labels = [] # 1 for married, 0 otherwise
 		parent_labels = [] # 1 for y, 0 otherwise
@@ -64,26 +87,28 @@ def get_features_bag_of_words():
 				age = int(row['age'])
 				if age <= 30:
 					age_bucket_labels.append(1)
-				elif age <= 60:
-					age_bucket_labels.append(2)
 				else:
-					age_bucket_labels.append(3)
+					age_bucket_labels.append(0)
 			else:
-				age_bucket_labels.append(1) # for now, assume 1 for bad input, TODO: change later!!!
+				age_bucket_labels.append(-1) # bad input
 			# gender labels
 			if row['gender'] == 'm':
 				gender_labels.append(0)
 			elif row['gender'] == 'f':
 				gender_labels.append(1)
 			else:
-				gender_labels.append(0) # for now, assume 0 for bad input, TODO: change later
+				gender_labels.append(-1) # bad input
 			# marital status labels
-			if row['marital'] == 'married':
+			if row['marital'] == '0':
+				marital_labels.append(-1) # bad input
+			elif row['marital'] == 'married':
 				marital_labels.append(1)
 			else:
 				marital_labels.append(0)
 			# parenthood status labels
-			if row['parenthood'] == 'y':
+			if row['parenthood'] == '0':
+				parent_labels.append(-1) # bad input
+			elif row['parenthood'] == 'y':
 				parent_labels.append(1)
 			else:
 				parent_labels.append(0)

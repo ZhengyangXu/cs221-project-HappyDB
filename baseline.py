@@ -50,12 +50,12 @@ def run_baseline():
 				if correct_age < 31 and any(string in row['cleaned_hm'] for string in young_strings):
 					age_classified = True
 					num_correct_age += 1
-				elif correct_age > 30 and correct_age < 61 and (parent or married):
+				elif correct_age > 30 and (parent or married):
 					age_classified = True
 					num_correct_age += 1
 				elif not age_classified:
-					rand_age = random.randint(1,3)
-					if (rand_age == 1 and correct_age < 31) or (rand_age == 2 and correct_age > 30 and correct_age < 61) or (rand_age == 3 and correct_age > 60):
+					rand_age = random.randint(1,2)
+					if (rand_age == 1 and correct_age < 31) or (rand_age == 2 and correct_age > 30):
 						num_correct_age += 1
 			# gender prediction
 			if row['gender'] in ['f', 'm']:
