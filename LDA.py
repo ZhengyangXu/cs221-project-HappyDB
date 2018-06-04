@@ -3,6 +3,7 @@
 import csv
 import nltk
 from nltk.tokenize import RegexpTokenizer
+from nltk.stem.porter import PorterStemmer
 import gensim
 from gensim import corpora
 import codecs
@@ -32,14 +33,17 @@ def LDA_topic_model(data):
 	stop_words = get_stop_words('en') # words that don't add much to meaning / topic
 	stop_words.extend(['happy','really','got','one','good','time','great','made','came',\
 		'today','day','yesterday','went','took','get','will','happiness','just'])
+	porter_stemmer = PorterStemmer()
 	happy_moments = [data[row][1] for row in range(len(data))]	
 
 	texts = []
 	for line in happy_moments:
 		raw = line.lower()
 		all_tokens = tokenizer.tokenize(raw)
-		tokens = [tok for tok in all_tokens if tok not in stop_words and len(tok)>1]
-		texts.append(tokens)
+		# don't include stop words
+		tokens_without_stop = [tok for tok in all_tokens if tok not in stop_words and len(tok)>1] 
+		stemmed_tokens = [porter_stemmer.stem(i) for i in tokens_without_stop]
+		texts.append(stemmed_tokens)
 
 	dictionary = corpora.Dictionary(texts)
 	corpus = [dictionary.doc2bow(text) for text in texts] # bag of words
