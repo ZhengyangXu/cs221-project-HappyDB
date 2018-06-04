@@ -9,24 +9,44 @@ import numpy as np
 
 filename = "data/data.csv"
 
-def run_naive_bayes(data, labels, test_data, test_labels, type):
+def get_accuracy_breakdown(predicted, labels, category):
+	predicted = np.array(predicted)
+	labels = np.array(labels)
+	if category == 'marital':	
+		print("Percent correct for married: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
+		print("Percent correct for unmarried: {}".format(np.mean(predicted[labels == 0] == labels[labels == 0])))
+	elif category == 'gender':
+		print("Percent correct for male: {}".format(np.mean(predicted[labels == 0] == labels[labels == 0])))
+		print("Percent correct for female: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
+	elif category == 'age':
+		print("Percent correct for < 31: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
+		print("Percent correct for > 30, < 61: {}".format(np.mean(predicted[labels == 2] == labels[labels == 2])))
+		print("Percent correct for > 60: {}".format(np.mean(predicted[labels == 3] == labels[labels == 3])))
+	elif category == 'parenthood':
+		print("Percent correct for parents: {}".format(np.mean(predicted[labels == 1] == labels[labels == 1])))
+		print("Percent correct for non-parents: {}".format(np.mean(predicted[labels == 0] == labels[labels == 0])))
+
+def run_naive_bayes(data, labels, test_data, test_labels, category):
 	# get data from get_features
 	clf = MultinomialNB().fit(data, labels)
 	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
-	print("Naive Bayes training accuracy ({}): ".format(type))
+	print("Naive Bayes training accuracy ({}): ".format(category))
 	print(np.mean(predicted == labels))
+	get_accuracy_breakdown(predicted, labels, category)
 
-def run_svm(data, labels, test_data, test_labels, type):
+def run_svm(data, labels, test_data, test_labels, category):
 	clf = SGDClassifier(max_iter = 10).fit(data, labels)
 	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
-	print("SVM training accuracy ({}): ".format(type))
+	print("SVM training accuracy ({}): ".format(category))
 	print(np.mean(predicted == labels))
+	get_accuracy_breakdown(predicted, labels, category)
 
-def run_lr(data, labels, test_data, test_labels, type):
+def run_lr(data, labels, test_data, test_labels, category):
 	clf = LogisticRegression().fit(data, labels)
 	predicted = clf.predict(data) # change to test_data intead of data when ready for testing
-	print("Logistic Regression training accuracy ({}): ".format(type))
+	print("Logistic Regression training accuracy ({}): ".format(category))
 	print(np.mean(predicted == labels))
+	get_accuracy_breakdown(predicted, labels, category)
 
 def get_features_bag_of_words():
 	with open(filename, 'rU') as csvfile:
