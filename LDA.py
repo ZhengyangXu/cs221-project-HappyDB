@@ -56,7 +56,7 @@ def LDA_topic_model(data):
 		opt_num_topics = None
 		opt_lda_model = None
 		for num_topics in range(start, max_num_topics, step):
-			lda_model = gensim.models.ldamodel.LdaModel(word_corpus, num_topics, id2word=word_dict, passes=2)
+			lda_model = gensim.models.ldamodel.LdaModel(word_corpus, num_topics, id2word=word_dict, passes=5)
 			coherence_model = CoherenceModel(model=lda_model, texts=lines, corpus=corpus, dictionary=dictionary, coherence='c_v')
 			coherence_val = coherence_model.get_coherence()
 			print "num topics:", num_topics, "// coherence val:", coherence_val
@@ -67,7 +67,7 @@ def LDA_topic_model(data):
 		return opt_lda_model, opt_num_topics
 	
 	lda_model, opt_num_topics = compute_opt_model(dictionary=word_dict, corpus=word_corpus, lines=texts, \
-		max_num_topics=25, start=3, step=3)
+		max_num_topics=20, start=3, step=3)
 	topics = lda_model.print_topics(opt_num_topics, num_words=6)
 	print '\n'.join('{}'.format(item) for item in topics)
 
