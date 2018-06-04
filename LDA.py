@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf8 -*-
 import csv
-import nltk
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem.porter import PorterStemmer
 import gensim
 from gensim import corpora
+from gensim.models.coherencemodel import CoherenceModel
 import codecs
 from stop_words import get_stop_words
 
@@ -32,24 +32,43 @@ def LDA_topic_model(data):
 	tokenizer = RegexpTokenizer(r'\w+')
 	stop_words = get_stop_words('en') # words that don't add much to meaning / topic
 	stop_words.extend(['happy','really','got','one','good','time','great','made','came',\
-		'today','day','yesterday','went','took','get','will','happiness','just'])
-	porter_stemmer = PorterStemmer()
+		'today','day','yesterday','went','took','get','will','happiness','just','since'])
+	porter_stemmer = PorterStemmer() # treat similar words as one term (i.e. family vs. families)
 	happy_moments = [data[row][1] for row in range(len(data))]	
 
 	texts = []
 	for line in happy_moments:
 		raw = line.lower()
 		all_tokens = tokenizer.tokenize(raw)
-		# don't include stop words
+		# to remove stop words
 		tokens_without_stop = [tok for tok in all_tokens if tok not in stop_words and len(tok)>1] 
 		stemmed_tokens = [porter_stemmer.stem(i) for i in tokens_without_stop]
 		texts.append(stemmed_tokens)
 
-	dictionary = corpora.Dictionary(texts)
-	corpus = [dictionary.doc2bow(text) for text in texts] # bag of words
-	num_topics = 9 # arbitrary for now
-	ldamodel = gensim.models.ldamodel.LdaModel(corpus, num_topics, id2word=dictionary, passes=20)
-	topics = ldamodel.print_topics(num_topics, num_words=6)
+	word_dict = corpora.Dictionary(texts)
+	word_corpus = [word_dict.doc2bow(text) for text in texts] # bag of words
+	
+	# goal: find optimal number of topics to have
+	# runs LDA with different number of topics
+	# returns LDA model with the highest topic coherence score 
+	def compute_opt_model(dictionary, corpus, lines, max_num_topics, start, step):		
+		max_coherence_val = float('-inf')
+		opt_num_topics = None
+		opt_lda_model = None
+		for num_topics in range(start, max_num_topics, step):
+			lda_model = gensim.models.ldamodel.LdaModel(word_corpus, num_topics, id2word=word_dict, passes=2)
+			coherence_model = CoherenceModel(model=lda_model, texts=lines, corpus=corpus, dictionary=dictionary, coherence='c_v')
+			coherence_val = coherence_model.get_coherence()
+			print "num topics:", num_topics, "// coherence val:", coherence_val
+			if coherence_val > max_coherence_val:
+				max_coherence_val = coherence_val
+				opt_num_topics = num_topics
+				opt_lda_model = lda_model
+		return opt_lda_model, opt_num_topics
+	
+	lda_model, opt_num_topics = compute_opt_model(dictionary=word_dict, corpus=word_corpus, lines=texts, \
+		max_num_topics=25, start=3, step=3)
+	topics = lda_model.print_topics(opt_num_topics, num_words=6)
 	print '\n'.join('{}'.format(item) for item in topics)
 
 def main():
