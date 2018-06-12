@@ -4,12 +4,27 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import SGDClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.pipeline import Pipeline
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.preprocessing.text import one_hot
+from keras.models import Sequential
+from keras.layers import Dense, Input, GlobalMaxPooling1D
+from keras.layers import Flatten
+from keras.layers import Conv1D, MaxPooling1D
+from keras.layers import Embedding
+from keras.models import Model
+import gensim
 import csv
 import numpy as np
+import os
 
 filename = "data/data.csv"
+glove_dir = 'glove.twitter.27B'
+glove_filename = 'glove.twitter.27B.25d.txt'
 
 def get_accuracy_breakdown(predicted, labels, category):
 	if category == 'marital':	
@@ -65,7 +80,9 @@ def run_lr(data, labels, test_data, test_labels, category):
 	labels_cleaned = labels_cleaned[labels_cleaned != -1]
 	test_data_cleaned = test_data[test_labels_cleaned != -1]
 	test_labels_cleaned = test_labels_cleaned[test_labels_cleaned != -1]
-	clf = LogisticRegression().fit(data_cleaned, labels_cleaned)
+	if category == 'age' and (2 in labels):
+		multi_class = 'multinomial'
+	clf = LogisticRegression(solver = 'sag').fit(data_cleaned, labels_cleaned)
 	predicted = clf.predict(data_cleaned) # change to test_data intead of data when ready for testing
 	print("Logistic Regression training accuracy ({}): ".format(category))
 	print(np.mean(predicted == labels_cleaned))
@@ -81,7 +98,7 @@ def run_mlp(data, labels, test_data, test_labels, category):
 	labels_cleaned = labels_cleaned[labels_cleaned != -1]
 	test_data_cleaned = test_data[test_labels_cleaned != -1]
 	test_labels_cleaned = test_labels_cleaned[test_labels_cleaned != -1]
-	clf = MLPClassifier(hidden_layer_sizes=(5,)).fit(data_cleaned, labels_cleaned)
+	clf = MLPClassifier(hidden_layer_sizes=(5,), early_stopping = True).fit(data_cleaned, labels_cleaned)
 	predicted = clf.predict(data_cleaned) # change to test_data intead of data when ready for testing
 	print("MLP training accuracy ({}): ".format(category))
 	print(np.mean(predicted == labels_cleaned))
@@ -159,11 +176,11 @@ def print_age_breakdown(age_bucket_labels, age_buckets):
 	for i in range(1, age_buckets+1):
 		print(len(age_labels[age_labels == i]))
 
-def get_features_bag_of_words(age_buckets = 2):
+def binary_bag_of_words(age_buckets = 2):
 	text_data, age_bucket_labels, gender_labels, marital_labels, parent_labels = clean_data(age_buckets=age_buckets)
 	print_age_breakdown(age_bucket_labels, age_buckets)
 
-	count_vect = CountVectorizer()
+	count_vect = CountVectorizer(binary=True)
 	X_counts = count_vect.fit_transform(text_data)
 
 	# tfidf_transformer = TfidfTransformer()
@@ -185,11 +202,37 @@ def get_features_bag_of_words(age_buckets = 2):
 
 	return X_train_counts, y_dict_train, X_test_counts, y_dict_test
 
+def get_features_bag_of_words(age_buckets = 2):
+	text_data, age_bucket_labels, gender_labels, marital_labels, parent_labels = clean_data(age_buckets=age_buckets)
+	print_age_breakdown(age_bucket_labels, age_buckets)
+
+	count_vect = CountVectorizer()
+	X_counts = count_vect.fit_transform(text_data)
+
+	tfidf_transformer = TfidfTransformer()
+	X_counts = tfidf_transformer.fit_transform(X_counts) # for ignoring length of text and reducing weight of common words
+	
+	training_size = int(X_counts.shape[0]*0.8) # 80:20 split for train/test data
+	X_train_counts = X_counts[:training_size, :] 
+	age_bucket_labels_train = age_bucket_labels[:training_size]
+	marital_labels_train = marital_labels[:training_size]
+	gender_labels_train = gender_labels[:training_size]
+	parent_labels_train = parent_labels[:training_size]
+	y_dict_train = {'age': age_bucket_labels_train, 'marital': marital_labels_train, 'gender': gender_labels_train, 'parenthood': parent_labels_train}
+	X_test_counts = X_counts[training_size:, :]
+	age_bucket_labels_test = age_bucket_labels[training_size:]
+	marital_labels_test = marital_labels[training_size:]
+	gender_labels_test = gender_labels[training_size:]
+	parent_labels_test = parent_labels[training_size:]
+	y_dict_test = {'age': age_bucket_labels_test, 'marital': marital_labels_test, 'gender': gender_labels_test, 'parenthood': parent_labels_test}
+
+	return X_train_counts, y_dict_train, X_test_counts, y_dict_test
+
 def bag_of_words_ngram(age_buckets = 2):
 	text_data, age_bucket_labels, gender_labels, marital_labels, parent_labels = clean_data(age_buckets = age_buckets)
 	print_age_breakdown(age_bucket_labels, age_buckets)
 
-	count_vect = CountVectorizer(analyzer='word', ngram_range=(1,2)) # use both unigram and bigram
+	count_vect = CountVectorizer(analyzer='word', ngram_range=(2,2)) # use bigram
 	X_counts = count_vect.fit_transform(text_data)
 
 	# tfidf_transformer = TfidfTransformer()
@@ -212,10 +255,205 @@ def bag_of_words_ngram(age_buckets = 2):
 
 	return X_train_counts, y_dict_train, X_test_counts, y_dict_test
 
+class MeanEmbeddingVectorizer(object):
+    def __init__(self, word2vec):
+        self.word2vec = word2vec
+        # if a text is empty we should return a vector of zeros
+        # with the same dimensionality as all the other vectors
+        self.dim = len(word2vec.itervalues().next())
+
+    def fit(self, X, y):
+        return self
+
+    def transform(self, X):
+        return np.array([
+            np.mean([self.word2vec[w] for w in words if w in self.word2vec]
+                    or [np.zeros(self.dim)], axis=0)
+            for words in X
+        ])
+
+def word_vec(category, age_buckets=2):
+	text_data, age_bucket_labels, gender_labels, marital_labels, parent_labels = clean_data(age_buckets = age_buckets)
+	training_size = int(len(text_data)*0.8)
+	if category == 'marital':
+		labels_cleaned = np.array(marital_labels)
+	elif category == 'gender':
+		labels_cleaned = np.array(gender_labels)
+	elif category == 'parenthood':
+		labels_cleaned = np.array(parent_labels)
+	elif category == 'age':
+		labels_cleaned = np.array(age_bucket_labels)
+	x_data = []
+	y_data = []
+	for i in range(len(text_data)):
+		if labels_cleaned[i] != -1:
+			x_data.append(text_data[i])
+			y_data.append(labels_cleaned[i])
+	x_train = x_data[:training_size]
+	y_train = y_data[:training_size]
+	x_test = x_data[training_size:]
+	y_test = y_data[training_size:]
+	
+	# build our own
+	model = gensim.models.Word2Vec(text_data, size=100)
+	w2v = dict(zip(model.wv.index2word, model.wv.syn0))
+	etree_w2v = Pipeline([
+    	("word2vec vectorizer", MeanEmbeddingVectorizer(w2v)),
+    	("random forest", RandomForestClassifier(n_estimators=100, max_depth=10))])
+    	etree_w2v.fit(x_train, y_train)
+    	predicted = etree_w2v.predict(x_train)
+    	print(np.mean(predicted == y_train))
+    	predicted_test = etree_w2v.predict(x_test)
+    	print(np.mean(predicted_test == y_test))
+
+    # glove
+	"""
+	with open(os.path.join(glove_dir, glove_filename)) as f:
+		w2v = {line.split()[0]: np.array(map(float, line.split()[1:]))
+           for line in f}
+    	etree_w2v = Pipeline([
+    	("word2vec vectorizer", MeanEmbeddingVectorizer(w2v)),
+    	("linear svc", SGDClassifier(max_iter = 10))])
+    	etree_w2v.fit(x_train, y_train)
+    	predicted = etree_w2v.predict(x_train)
+    	print(np.mean(predicted == y_train))
+    	predicted_test = etree_w2v.predict(x_test)
+    	print(np.mean(predicted_test == y_test))
+    """
+
+def build_word_embeddings(category, age_buckets=2):
+	# doesn't work well
+	text_data, age_bucket_labels, gender_labels, marital_labels, parent_labels = clean_data(age_buckets = age_buckets)
+	training_size = int(len(text_data)*0.8)
+	vocab_size = 100000
+	encoded_docs = [one_hot(d, vocab_size) for d in text_data]
+	max_length = max(len(l) for l in text_data)
+	data = pad_sequences(encoded_docs, maxlen=max_length, padding='post')
+
+	if category == 'marital':
+		labels_cleaned = np.array(marital_labels)
+	elif category == 'gender':
+		labels_cleaned = np.array(gender_labels)
+	elif category == 'parenthood':
+		labels_cleaned = np.array(parent_labels)
+	elif category == 'age':
+		labels_cleaned = np.array(age_bucket_labels)
+
+	x_data = data[labels_cleaned != -1]
+	labels_cleaned = labels_cleaned[labels_cleaned != -1]
+	
+	x_train = x_data[:training_size]
+	y_train = labels_cleaned[:training_size]
+	x_test = x_data[training_size:]
+	y_test = labels_cleaned[training_size:]
+	model = Sequential()
+	model.add(Embedding(vocab_size, 8, input_length=max_length))
+	model.add(Flatten())
+	model.add(Dense(1, activation='sigmoid'))
+	model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+	print(model.summary())
+	loss, accuracy = model.evaluate(x_train, y_train, verbose=0)
+	print('Accuracy: %f' % (accuracy*100))
+	loss, accuracy = model.evaluate(x_test, y_test, verbose=0)
+	print('Accuracy: %f' % (accuracy*100))
+
+def word_embeddings(category, age_buckets=2):
+	# takes forever, doesn't work well at all
+	text_data, age_bucket_labels, gender_labels, marital_labels, parent_labels = clean_data(age_buckets = age_buckets)
+	training_size = int(len(text_data)*0.8)
+	embeddings_index = {}
+	with open(os.path.join(glove_dir, glove_filename)) as f:
+		for line in f:
+			values = line.split()
+			word = values[0]
+    		coefs = np.asarray(values[1:], dtype='float32')
+    		embeddings_index[word] = coefs
+
+	t = Tokenizer(num_words = 100000)
+	t.fit_on_texts(text_data)
+	vocab_size = len(t.word_index) + 1
+	encoded_texts = t.texts_to_sequences(text_data)
+	max_length = max(len(l) for l in text_data)
+	data = pad_sequences(encoded_texts, maxlen=max_length, padding='post')
+
+	if category == 'marital':
+		labels_cleaned = np.array(marital_labels)
+	elif category == 'gender':
+		labels_cleaned = np.array(gender_labels)
+	elif category == 'parenthood':
+		labels_cleaned = np.array(parent_labels)
+	elif category == 'age':
+		labels_cleaned = np.array(age_bucket_labels)
+
+	x_data = data[labels_cleaned != -1]
+	labels_cleaned = labels_cleaned[labels_cleaned != -1]
+	
+	x_train = x_data[:training_size]
+	y_train = labels_cleaned[:training_size]
+	x_test = x_data[training_size:]
+	y_test = labels_cleaned[training_size:]
+	
+	embedding_matrix = np.zeros((vocab_size, 100))
+	for word, i in t.word_index.items():
+		embedding_vector = embeddings_index.get(word)
+		if embedding_vector is not None:
+			embedding_matrix[i] = embedding_vector
+
+	embedding_layer = Embedding(vocab_size,
+                            100,
+                            weights=[embedding_matrix],
+                            input_length=max_length,
+                            trainable=False)
+	convnet(embedding_layer, max_length, x_train, y_train, x_test, y_test)
+	"""
+	model = Sequential()
+	model.add(embedding_layer)
+	model.add(Flatten())
+	model.add(Dense(1, activation='sigmoid'))
+	model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+	# marital
+	model.fit(x_train, y_train, epochs=50, verbose=0)
+	loss, accuracy = model.evaluate(x_train, y_train, verbose=0)
+	print('Accuracy: %f' % (accuracy*100))
+
+	loss_, accuracy_ = model.evaluate(x_test, y_test, verbose=0)
+	print('Accuracy: %f' % (accuracy_*100))
+	"""
+
+def convnet(embedding_layer, max_length, x_train, y_train, x_test, y_test):
+	# takes forever, doesn't work well at all
+	sequence_input = Input(shape=(max_length,), dtype='int32')
+	embedded_sequences = embedding_layer(sequence_input)
+	x = Conv1D(128, 5, activation='relu')(embedded_sequences)
+	x = MaxPooling1D(5)(x)
+	x = Conv1D(128, 5, activation='relu')(x)
+	x = MaxPooling1D(5)(x)
+	x = Conv1D(128, 5, activation='relu')(x)
+	x = GlobalMaxPooling1D()(x)
+	x = Dense(128, activation='relu')(x)
+	preds = Dense(1, activation='softmax')(x)
+
+	model = Model(sequence_input, preds)
+	model.compile(loss='binary_crossentropy',
+              optimizer='rmsprop',
+              metrics=['acc'])
+
+	model.fit(x_train, y_train,
+          batch_size=128,
+          epochs=5,
+          validation_data=(x_test, y_test))
+	loss, accuracy = model.evaluate(x_train, y_train, verbose=0)
+	print('Accuracy: %f' % (accuracy*100))
+
+	loss_, accuracy_ = model.evaluate(x_test, y_test, verbose=0)
+	print('Accuracy: %f' % (accuracy_*100))
+
 def main():
 	age_buckets = 2
 	x_train, y_dict_train, x_test, y_dict_test = get_features_bag_of_words(age_buckets = age_buckets) # unigram
-	# x_train, y_dict_train, x_test, y_dict_test = bag_of_words_ngram(age_buckets = age_buckets) # unigram and bigram
+	# x_train, y_dict_train, x_test, y_dict_test = bag_of_words_ngram(age_buckets = age_buckets) # bigram
+	# x_train, y_dict_train, x_test, y_dict_test = binary_bag_of_words(age_buckets = age_buckets) # binary bag of words
+	
 	run_naive_bayes(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'], 'marital')
 	run_naive_bayes(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'], 'gender')
 	run_naive_bayes(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'], 'parenthood')
@@ -228,13 +466,20 @@ def main():
 	run_lr(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'], 'gender')
 	run_lr(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'], 'parenthood')
 	run_lr(x_train, y_dict_train['age'], x_test, y_dict_test['age'], 'age')
-	
-	# takes a long time
 	"""
+	# takes a long time
 	run_mlp(x_train, y_dict_train['marital'], x_test, y_dict_test['marital'], 'marital')
 	run_mlp(x_train, y_dict_train['gender'], x_test, y_dict_test['gender'], 'gender')
 	run_mlp(x_train, y_dict_train['parenthood'], x_test, y_dict_test['parenthood'], 'parenthood')
 	run_mlp(x_train, y_dict_train['age'], x_test, y_dict_test['age'], 'age')
 	"""
+	# word_embeddings('marital', age_buckets=age_buckets)
+	# word_embeddings('gender', age_buckets=age_buckets)
+	# build_word_embeddings('marital', age_buckets=age_buckets)
+	# word_vec('marital', age_buckets)
+	# word_vec('gender', age_buckets)
+	# word_vec('parenthood', age_buckets)
+	# word_vec('age', age_buckets)
+
 if __name__ == '__main__':
 	main()
